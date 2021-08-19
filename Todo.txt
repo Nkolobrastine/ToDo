@@ -1,0 +1,69 @@
+from fastapi import FastAPI,HTTPException,status
+from pydantic import BaseModel
+from typing import Optional,List
+import uvicorn
+import Model
+from Database import SessionLocal
+
+class ToDo (BaseModel):
+    id: int
+    name: str
+    description: str
+
+    class config:
+        orm_mode = True
+
+
+db = SessionLocal()
+app = FastAPI()
+
+
+# create, add , update , delete
+@app.get ("/todo/", response_model=List[ToDo], status_code=200)
+async def get_all_todo():
+    todo = db.query (Model.ToDo).all ()
+    return todo
+
+
+@app.get ("/todo/{id}", response_model=ToDo, status_code=status.HTTP_200_OK)
+async def get_a_todo(id: int):
+    todos = db.query (Model.ToDo).filter (Model.ToDo.id == id).first ()
+    return todos
+
+
+@app.post ("/todo", response_model=ToDo, status_code=status.HTTP_201_CREATED)
+async def create_a_todo(todo: ToDo):
+    db_todo = db.query (Model.ToDo).filter (Model.ToDo.name == todo.name).first ()
+    if db_todo:
+        raise HTTPException (status_code=400, detail="ToDo exist")
+
+    new_todo = Model.ToDo (
+        id=todo.id,
+        name=todo.name,
+        description=todo.description,
+        )
+
+    db.add (new_todo)
+    db.rollback ()
+    return new_todo
+
+
+@app.put ("/todo/{id}", response_model=ToDo, status_code=status.HTTP_200_OK)
+async def update_todo(id: int, todo: ToDo):
+    todo_update = db.query (Model.ToDo).filter (Model.ToDo.id == id).first ()
+    todo_update.name = todo.name
+    todo_update.description = todo.description
+
+    db.commit ()
+    return todo_update
+
+
+@app.delete ("/todo/{id}")
+async def delete_todo(id: int):
+    todo_delete = db.query (Model.ToDo).filter (Model.ToDo.id == id).first ()
+    if todo_delete:
+        raise HTTPException (status_code=status.HTTP_404_NOT_FOUND, detail="Resource not Found")
+    return todo_delete
+db.commit()
+if __name__ == "__main__":
+    uvicorn.run ('ToDo:app', host="127.0.0.1", port=8000, reload=True)
